@@ -1,0 +1,69 @@
+import cv2
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+
+# 1. This tells Python to load your uploaded file
+MODEL_PATH = "C:\Users\Ram\Downloads\hand_landmarker.task"
+
+base_options = python.BaseOptions(
+    model_asset_path=MODEL_PATH
+)
+
+# 2. Configure the settings for Hand Tracking
+options = vision.HandLandmarkerOptions(
+    base_options=base_options,
+    running_mode=vision.RunningMode.VIDEO,
+    num_hands=2 # Detect up to 2 hands at the same time
+) 
+
+detector = vision.HandLandmarker.create_from_options(options)
+
+# 3. Start your computer's webcam
+cap = cv2.VideoCapture(0)
+timestamp = 0
+
+# Hand skeleton layout (tells the code how to connect the dots)
+HAND_CONNECTIONS = [
+    (0, 1), (1, 2), (2, 3), (3, 4),        # Thumb
+    (0, 5), (5, 6), (6, 7), (7, 8),        # Index
+    (9, 10), (10, 11), (11, 12),           # Middle
+    (13, 14), (14, 15), (15, 16),          # Ring
+    (0, 17), (17, 18), (18, 19), (19, 20), # Pinky
+    (5, 9), (9, 13), (13, 17)              # Palm baseline
+]
+
+while cap.isOpened():
+    success, frame = cap.read()
+    if not success:
+        break
+
+    frame = cv2.flip(frame, 1)
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
+    # Send the image to your .task file to find the hands
+    result = detector.detect_for_video(mp_image, timestamp)
+    h, w, _ = frame.shape
+
+    # Draw the results on your webcam feed
+    if result.hand_landmarks:
+        for hand_landmarks in result.hand_landmarks:
+            points = []
+            for landmark in hand_landmarks:
+                x = int(landmark.x * w)
+                y = int(landmark.y * h)
+                points.append((x, y))
+                cv2.circle(frame, (x, y), 4, (0, 255, 0), -1) # Draw green joint dots
+
+            for start, end in HAND_CONNECTIONS:
+                cv2.line(frame, points[start], points[end], (255, 0, 0), 2) # Draw blue lines
+
+    cv2.imshow("Hand Landmarker", frame)
+    timestamp += 33
+
+    if cv2.waitKey(1) & 0xFF == 27: # Press the 'Esc' key to close the window
+        break
+
+cap.release()
+cv2.destroyAllWindows()
